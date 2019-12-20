@@ -61,9 +61,7 @@ declare function _:set-value($map, $val){
 };
 
 declare function _:set($board, $c1, $r1, $c2, $r2, $val){
-  let $board := _:block-fun($board, $c1, $r1, $val)
-                => _:column-fun($c1, $c2, $val)
-                => _:row-fun($r1, $r2, $val)
+  let $board := _:remove-from-visible($board, $c1, $r1, $c2, $r2, $val)
     , $ac1 := $board($c1)
     , $ar1 := $ac1($r1)
     , $ac2 := $ar1($c2)
@@ -116,9 +114,9 @@ declare function _:mirror-quad($pos)
   let $c1 := $pos?1, $r1 := $pos?2, $c2 := $pos?3, $r2 := $pos?4
   return
   (
-    [$c1,             $r1,             $c2,             $r2    ],
-    [$c1,             _:swap($r1), $c2,             _:swap($r2)],
-    [_:swap($c1), $r1,             _:swap($c2), $r2            ],
+    [$c1,         $r1,         $c2,         $r2        ],
+    [$c1,         _:swap($r1), $c2,         _:swap($r2)],
+    [_:swap($c1), $r1,         _:swap($c2), $r2        ],
     [_:swap($c1), _:swap($r1), _:swap($c2), _:swap($r2)]
   ) => _:distinct()
 };
@@ -128,8 +126,8 @@ declare function _:mirror-horiz($pos)
   let $c1 := $pos?1, $r1 := $pos?2, $c2 := $pos?3, $r2 := $pos?4
   return
   (
-    [$c1,             $r1,             $c2,             $r2    ],
-    [$c1,             _:swap($r1), $c2,             _:swap($r2)]
+    [$c1, $r1,         $c2, $r2        ],
+    [$c1, _:swap($r1), $c2, _:swap($r2)]
   ) => _:distinct()
 };
 
@@ -138,8 +136,8 @@ declare function _:mirror-vert($pos)
   let $c1 := $pos?1, $r1 := $pos?2, $c2 := $pos?3, $r2 := $pos?4
   return
   (
-    [$c1,             $r1,             $c2,             $r2    ],
-    [_:swap($c1), $r1,             _:swap($c2), $r2            ]
+    [$c1,         $r1, $c2,         $r2],
+    [_:swap($c1), $r1, _:swap($c2), $r2]
   ) => _:distinct()
 };
 
@@ -148,8 +146,8 @@ declare function _:mirror-diag($pos)
   let $c1 := $pos?1, $r1 := $pos?2, $c2 := $pos?3, $r2 := $pos?4
   return
   (
-    [$c1,             $r1,             $c2,             $r2    ],
-    [_:swap($c1), _:swap($r1), _:swap($c2), _:swap($r2)        ]
+    [$c1,         $r1,         $c2,         $r2        ],
+    [_:swap($c1), _:swap($r1), _:swap($c2), _:swap($r2)]
   ) => _:distinct()
 };
 
@@ -219,48 +217,35 @@ declare function _:row-id($a){
   (($a(2) - 1) * 3) + $a(4)
 };
 
-declare function _:block-fun($board, $c1, $r1, $val){
-  (
-    for $c2 in 1 to 3
-    for $r2 in 1 to 3
+declare function _:remove-from-visible($board, $c1, $r1, $c2, $r2, $val)
+{
+  let $blk := 
+    for $c2 in 1 to 3, $r2 in 1 to 3
+    where 
+      _:is-possible($board, $c1, $r1, $c2, $r2, $val)
     return
-    map{
-      'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val
-    }
-  )
-  => fn:fold-left($board, function($acc, $val){
-    _:remove-from-possible($acc, $val?c1, $val?r1, $val?c2, $val?r2, $val?v)
-  })
-};
-
-declare function _:column-fun($board, $c1, $c2, $val){
-  (
-    for $r1 in 1 to 3
-    for $r2 in 1 to 3
+      map{ 'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val }
+  
+  let $col := 
+    for $r1 in 1 to 3, $r2 in 1 to 3
+    where 
+      _:is-possible($board, $c1, $r1, $c2, $r2, $val)
     return
-    map{
-      'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val
-    }
-  )
-  => fn:fold-left($board, function($acc, $val){
-    _:remove-from-possible($acc, $val?c1, $val?r1, $val?c2, $val?r2, $val?v)
-  })
-};
-
-declare function _:row-fun($board, $r1, $r2, $val){
-  (
-    for $c1 in 1 to 3
-    for $c2 in 1 to 3
+      map{ 'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val }
+  
+  let $row := 
+    for $c1 in 1 to 3, $c2 in 1 to 3
+    where 
+      _:is-possible($board, $c1, $r1, $c2, $r2, $val)
     return
-    map{
-      'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val
-    }
-  )
-  => fn:fold-left($board, function($acc, $val){
-    _:remove-from-possible($acc, $val?c1, $val?r1, $val?c2, $val?r2, $val?v)
-  })
+      map{ 'c1' : $c1, 'c2' : $c2, 'r1' : $r1, 'r2' : $r2, 'v' : $val }
+  
+  return
+    ($blk, $col, $row)
+    => fn:fold-left($board, function($acc, $val){
+      _:remove-from-possible($acc, $val?c1, $val?r1, $val?c2, $val?r2, $val?v)
+    })
 };
-
 
 declare function _:random-order($l){
   random:seeded-permutation(

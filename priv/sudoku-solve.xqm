@@ -12,21 +12,21 @@ declare variable $_:SIMP_FUNS := (
 
 (: All solving logic functions :)
 declare variable $_:LOOP_FUNS := (
-  ['sole',          0, _:solve-sole-candidate#1],
-  ['unique',        0, _:solve-unique-candidate#1],
-  ['naked_2',       10, _:solve-naked-subsets(?, 2)],
-  ['naked_3',       10, _:solve-naked-subsets(?, 3)],
-  ['block',         10, _:solve-block-column#1],
-  ['block',         10, _:solve-block-row#1],
-  ['hidden_2',      10, _:solve-hidden-subsets(?, 2)],
-  ['xyz_wing',      100, _:solve-xyz-wing#1],
-  ['x_wing',        100, _:solve-x-wing-row#1],
-  ['xy_wing',       100, _:solve-xy-wing#1],
-  ['hidden_3',      100, _:solve-hidden-subsets(?, 3)],
-  ['naked_4',       100, _:solve-naked-subsets(?, 4)],
-  ['hidden_4',      100, _:solve-hidden-subsets(?, 4)],
-  ['coloring',      1000, _:solve-coloring#1],
-  ['forcing_chain', 1000, _:solve-forcing-chain#1]
+  ['sole',             1, _:solve-sole-candidate#1    ],
+  ['unique',           1, _:solve-unique-candidate#1  ],
+  ['naked_2',         10, _:solve-naked-subsets(?, 2) ],
+  ['naked_3',         10, _:solve-naked-subsets(?, 3) ],
+  ['block',           10, _:solve-block-column#1      ],
+  ['block',           10, _:solve-block-row#1         ],
+  ['hidden_2',        10, _:solve-hidden-subsets(?, 2)],
+  ['xyz_wing',       100, _:solve-xyz-wing#1          ],
+  ['x_wing',         100, _:solve-x-wing-row#1        ],
+  ['xy_wing',        100, _:solve-xy-wing#1           ],
+  ['hidden_3',       100, _:solve-hidden-subsets(?, 3)],
+  ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
+  ['hidden_4',       100, _:solve-hidden-subsets(?, 4)],
+  ['coloring',      1000, _:solve-coloring#1          ],
+  ['forcing_chain', 1000, _:solve-forcing-chain#1     ]
 
 );
 
@@ -794,26 +794,30 @@ declare %private function _:solve-sole-candidate($board)
 
 declare %private function _:hidden-permutations($maps, $n)
 {
-  switch ($n)
-    case 2 return 
-      _:hidden_permutations_2($maps)
-    case 3 return 
-      _:hidden_permutations_3($maps)
-    case 4 return 
-      _:hidden_permutations_4($maps)
-    default return ()
+  if ($n > count($maps)) then
+    switch ($n)
+      case 2 return 
+        _:hidden_permutations_2($maps)
+      case 3 return 
+        _:hidden_permutations_3($maps)
+      case 4 return 
+        _:hidden_permutations_4($maps)
+      default return ()
+    else ()
 };
 
 declare %private function _:permutations($maps, $n)
 {
-  switch ($n)
-    case 2 return 
-      _:permutations_2($maps)
-    case 3 return 
-      _:permutations_3($maps)
-    case 4 return 
-      _:permutations_4($maps)
-    default return ()
+  if ($n > count($maps)) then
+    switch ($n)
+      case 2 return 
+        _:permutations_2($maps)
+      case 3 return 
+        _:permutations_3($maps)
+      case 4 return 
+        _:permutations_4($maps)
+      default return ()
+    else ()
 };
 
 declare %private function _:permutations_4($maps)
