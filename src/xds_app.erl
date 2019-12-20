@@ -1,9 +1,4 @@
-%%%-------------------------------------------------------------------
-%% @doc xqerl_demo_sudoku public API
-%% @end
-%%%-------------------------------------------------------------------
-
--module(xqerl_demo_sudoku_app).
+-module(xds_app).
 
 -behaviour(application).
 
@@ -15,7 +10,7 @@
 %%====================================================================
 
 start(_StartType, _StartArgs) ->
-    xqerl_demo_sudoku_sup:start_link().
+    xds_sup:start_link().
 
 %%--------------------------------------------------------------------
 stop(_State) ->

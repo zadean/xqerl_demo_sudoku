@@ -2,10 +2,11 @@
  [{description, "An OTP application"},
   {vsn, "0.1.0"},
   {registered, []},
-  {mod, {xqerl_demo_sudoku_app, []}},
+  {mod, {xds_app, []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    xqerl
    ]},
   {env,[]},
   {modules, []},
