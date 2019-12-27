@@ -26,6 +26,7 @@ declare variable $_:LOOP_FUNS := (
   ['hidden_3',       100, _:solve-hidden-subsets(?, 3)],
   ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
   ['hidden_4',       100, _:solve-hidden-subsets(?, 4)],
+  ['wxyz_wing',     1000, _:solve-wxyz-wing#1         ],
   ['coloring',      1000, _:solve-coloring#1          ],
   ['forcing_chain', 1000, _:solve-forcing-chain#1     ]
 
@@ -380,6 +381,66 @@ declare %private function _:solve-xy-wing($board)
   })
 };
 
+declare %private function _:can-see-each-other($cell1, $cell2)
+{
+  ($cell1?c1 eq $cell2?c1 and $cell1?c2 eq $cell2?c2)
+  or
+  ($cell1?r1 eq $cell2?r1 and $cell1?r2 eq $cell2?r2)
+  or
+  ($cell1?c1 eq $cell2?c1 and $cell1?r1 eq $cell2?r1)
+};
+
+(: WXYZ-Wing - https://www.sudokuwiki.org/WXYZ_Wing
+  When 3 cells are visible from a hinge cell and form a naked quad:
+  Only one of the possibilities must be unable to see all other cells.
+  That value becomes the 'Z' value to eliminate from other cells.
+  The 'Z' can be removed from all cells not included in the quad that
+  can see all cells in the quad.
+ :)
+declare %private function _:solve-wxyz-wing($board)
+{
+  let $un := _:get-unsolved($board)
+  return
+  (
+    for $hinge in $un
+    let $vis := b:visible-cells($hinge, $un)
+    for $quad in _:naked-quad(($hinge, $vis))
+    let $ps := $quad?*?p => distinct-values()
+    let $cand := 
+      for $p in $ps
+      for $q in $quad?*
+      where
+        $q?p = $p
+      group by
+        $p
+      where
+        (every $q0 in $q, $q1 in $q satisfies _:can-see-each-other($q0, $q1)) => not()
+      return
+        [$p, $q]
+    return
+    if (count($cand) eq 1 ) then
+      let $v := $cand?1
+      let $head := head($cand?2) => b:visible-cells($un)
+      for $inter in fold-left(tail($cand?2), $head, function($acc, $i){
+        b:visible-cells($i, $un) => _:deep-intersection($acc)
+      })
+      where
+        (some $w in $cand?2 satisfies deep-equal($w, $inter)) => not()
+      where
+        b:is-possible($board, $inter?c1, $inter?r1, $inter?c2, $inter?r2, $v)
+      return 
+        map{
+        'v' : $v,
+        'r1' : $inter?r1, 'r2' : $inter?r2,
+        'c1' : $inter?c1, 'c2' : $inter?c2
+      }
+    else ()
+  )[1]
+  => fold-left($board, function($acc, $i){
+        b:remove-from-possible($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
+      })
+};
+
 (: XYZ-Wing - https://sudoku9x9.com/xyz_wing.html
   When an XYZ and XZ are in the same block, look for a YZ in a column or row.
   If it exists, remove the Z value from the axis of the cell outside the block
@@ -695,6 +756,19 @@ declare %private function _:solve-naked-row-subsets($board, $n)
   => fn:fold-left($board, function($acc, $i){
     b:remove-from-possible($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
   })
+};
+
+declare %private function _:naked-quad($cells)
+{
+  if (count($cells) le 4)  then ()
+  else
+    for $a in _:permutations($cells, 4)
+    let $ms := $a?*
+    let $ps := $ms?p => distinct-values()
+    where 
+      count($ps) eq 4
+    return
+      array{$ms}
 };
 
 declare %private function _:paired-possibles($cells, $n)
