@@ -21,6 +21,7 @@ declare variable $_:LOOP_FUNS := (
   ['hidden_2',        10, _:solve-hidden-subsets(?, 2)],
   ['xyz_wing',       100, _:solve-xyz-wing#1          ],
   ['x_wing',         100, _:solve-x-wing-row#1        ],
+  ['x_wing',         100, _:solve-x-wing-column#1     ],
   ['xy_wing',        100, _:solve-xy-wing#1           ],
   ['hidden_3',       100, _:solve-hidden-subsets(?, 3)],
   ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
@@ -31,12 +32,26 @@ declare variable $_:LOOP_FUNS := (
 );
 
 (: debug function to dump each step :)
-declare function _:dump($board, $key)
+declare function _:dump-diff($original, $new, $key){$new};
+declare function _:dump-diff_($original, $new, $key)
 {
-  (: let $f := file:append-text-lines(file:base-dir() || 'dump_do.log', ?) :)
-  (: let $_ := array {$board => _:print(), $key} => serialize(map{'method':'adaptive'}) => $f() :)
-  (: return :)
-  $board
+  let $ms := _:board-diff($original, $new)
+  let $f := file:append-text-lines(file:base-dir() || 'dump_do.log', ?)
+  let $_ := 
+    (
+      '_______ ' || $key || ' _______',
+      for $m in $ms return $m => _:print-move()) => $f()
+  return
+  ($_, $new)
+};
+
+declare function _:print-move($move)
+{
+  let $r := (($move?r1 - 1) * 3) + $move?r2 + 64
+  let $c := (($move?c1 - 1) * 3) + $move?c2 + 48
+  let $v := $move?v
+  return
+  ($r, $c) => codepoints-to-string() || ' : ' || $v
 };
 
 (: debug function to print the solved board :)
@@ -202,18 +217,17 @@ declare %private function _:solve-x-wing-row($board)
   let $un := _:get-unsolved($board)
   let $two := (
     for $u in $un
-    for $p in $u?p
-    let $r1 := $u?r1, $r2 := $u?r2
     let $c := (($u?c1 - 1) * 3) + $u?c2
     let $r := (($u?r1 - 1) * 3) + $u?r2
+    for $p in $u?p
     group by
-      $p,
-      $r
+      $p, $r
     where
       count($u) eq 2
-    order by $p
+    order by 
+      $p
     return
-    [$p, $c, $r, $u])
+      [$p, $c, $r, $u])
   let $four :=
     for $x in $two, $y in $two
     let $p1 := $x(1), $p2 := $y(1)
@@ -239,12 +253,13 @@ declare %private function _:solve-x-wing-row($board)
     let $c2 := $u?c2
     let $r := [$u?r1, $u?r2]
     group by
-    $p, $c1, $c2
+      $p, $c1, $c2
     return
     for $r1 in 1 to 3, $r2 in 1 to 3
     where
       (for $r in $r where deep-equal($r, [$r1, $r2]) return $r) => empty()
-    where b:is-possible($board, $c1, $r1, $c2, $r2, $p)
+    where 
+      b:is-possible($board, $c1, $r1, $c2, $r2, $p)
     return
     map{
       'v' : $p, 'c1': $c1, 'c2': $c2, 'r1' : $r1, 'r2' : $r2
@@ -259,7 +274,62 @@ declare %private function _:solve-x-wing-row($board)
 
 declare %private function _:solve-x-wing-column($board)
 {
-  (: TODO :)
+  let $un := _:get-unsolved($board)
+  let $two := (
+    for $u in $un
+    let $c := (($u?c1 - 1) * 3) + $u?c2
+    let $r := (($u?r1 - 1) * 3) + $u?r2
+    for $p in $u?p
+    group by
+      $p, $c
+    where
+      count($u) eq 2
+    order by 
+      $p
+    return
+      [$p, $c, $r, $u])
+  let $four :=
+    for $x in $two, $y in $two
+    let $p1 := $x(1), $p2 := $y(1)
+    let $c1 := $x(2), $c2 := $y(2)
+    let $r1 := $x(3), $r2 := $y(3)
+    let $u1 := $x(4)
+    where
+      $p1 eq $p2 and
+      deep-equal($r1, $r2) and
+      $c1 ne $c2
+    group by $p1
+    where
+      count($u1) eq 4
+    return 
+      [$p1, $u1]
+  let $rem := 
+  (
+    for $x in $four
+    return
+    let $p := $x(1)
+    for $u in $x(2)
+    let $r1 := $u?r1
+    let $r2 := $u?r2
+    let $c := [$u?c1, $u?c2]
+    group by
+      $p, $r1, $r2
+    return
+    for $c1 in 1 to 3, $c2 in 1 to 3
+    where
+      (for $c in $c where deep-equal($c, [$c1, $c2]) return $c) => empty()
+    where 
+      b:is-possible($board, $c1, $r1, $c2, $r2, $p)
+    return
+    map{
+      'v' : $p, 'c1': $c1, 'c2': $c2, 'r1' : $r1, 'r2' : $r2
+    }
+  )
+  return
+  $rem
+  => fold-left($board, function($acc, $i){
+    b:remove-from-possible($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
+  })
 };
 
 (: XY-Wing -https://sudoku9x9.com/xy_wing.html
@@ -409,7 +479,8 @@ declare %private function _:solve-coloring($board)
     return
       array {$p, $u}
   )
-  let $row2 := (
+  let $row2 := if(exists($col2)) then () else
+  (
     for $u in $un
     let $r1 := $u?r1, $r2 := $u?r2
     for $p in $u?p
@@ -422,7 +493,8 @@ declare %private function _:solve-coloring($board)
     return
       array {$p, $u}
   )
-  let $blk2 := (
+  let $blk2 := if(exists(($col2, $row2))) then () else
+  (
     for $u in $un
     let $c1 := $u?c1, $r1 := $u?r1
     for $p in $u?p
@@ -496,7 +568,7 @@ declare %private function _:coloring-loop($board)
   try {
     _:coloring-loop($board, 4)
   } catch * {
-     $board => _:dump('co ' || $err:code)
+     $board
   }
 };
 
@@ -627,32 +699,35 @@ declare %private function _:solve-naked-row-subsets($board, $n)
 
 declare %private function _:paired-possibles($cells, $n)
 {
-  for $a in _:permutations($cells, $n)
-  let $ms := $a?*
-  let $ps := $ms?p => distinct-values()
-  where 
-    count($ps) eq $n
-  let $ns := fn:filter($cells, function($i){
-    $i?p = $ps and
-    (every $x in $ms satisfies deep-equal($i, $x) => not())
-  })
-  for $p in $ps
-  for $n in $ns
-  return
-    map:put($n, 'v', $p)
+  if (count($cells) le $n)  then ()
+  else
+    for $a in _:permutations($cells, $n)
+    let $ms := $a?*
+    let $ps := $ms?p => distinct-values()
+    where 
+      count($ps) eq $n
+    let $ns := fn:filter($cells, function($i){
+      $i?p = $ps and
+      (every $x in $ms satisfies deep-equal($i, $x) => not())
+    })
+    for $p in $ps, $n in $ns
+    return
+      map:put($n, 'v', $p)
 };
 
 declare %private function _:paired-hidden($cells, $n)
 {
-  for $a in _:hidden-permutations($cells, $n)
-  let $ps := $a(1)
-  let $ms := $a => array:tail() => array:flatten()
-  for $m in $ms
-  for $mp in $m?p
-  where
-    not(($mp = $ps))
-  return
-    map:put($m, 'v', $mp)
+  if (count($cells) le $n)  then ()
+  else
+    for $a in _:hidden-permutations($cells, $n)
+    let $ps := $a(1)
+    let $ms := $a => array:tail() => array:flatten()
+    for $m in $ms
+    for $mp in $m?p
+    where
+      not(($mp = $ps))
+    return
+      map:put($m, 'v', $mp)
 };
 
 
@@ -794,30 +869,26 @@ declare %private function _:solve-sole-candidate($board)
 
 declare %private function _:hidden-permutations($maps, $n)
 {
-  if ($n > count($maps)) then
-    switch ($n)
-      case 2 return 
-        _:hidden_permutations_2($maps)
-      case 3 return 
-        _:hidden_permutations_3($maps)
-      case 4 return 
-        _:hidden_permutations_4($maps)
-      default return ()
-    else ()
+  switch ($n)
+    case 2 return 
+      _:hidden_permutations_2($maps)
+    case 3 return 
+      _:hidden_permutations_3($maps)
+    case 4 return 
+      _:hidden_permutations_4($maps)
+    default return ()
 };
 
 declare %private function _:permutations($maps, $n)
 {
-  if ($n > count($maps)) then
-    switch ($n)
-      case 2 return 
-        _:permutations_2($maps)
-      case 3 return 
-        _:permutations_3($maps)
-      case 4 return 
-        _:permutations_4($maps)
-      default return ()
-    else ()
+  switch ($n)
+    case 2 return 
+      _:permutations_2($maps)
+    case 3 return 
+      _:permutations_3($maps)
+    case 4 return 
+      _:permutations_4($maps)
+    default return ()
 };
 
 declare %private function _:permutations_4($maps)
@@ -964,7 +1035,7 @@ declare %private function _:do-loop($board, $cnts, $funs, $allFuns)
         )
       else
         _:do-loop(
-          $board1 => _:dump($key), 
+          _:dump-diff($board, $board1, $key), 
           _:incr_cnt($cnts, $key (: => trace('did ') :), $weight),
           $allFuns,
           $allFuns)

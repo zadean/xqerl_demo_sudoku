@@ -45,11 +45,14 @@ declare function _:remove-from-possible($board, $c1, $r1, $c2, $r2, $val){
     , $ac2 := $ar1($c2)
     , $ar2 := $ac2($r2)
   return
-    array:put($board, $c1,
-      array:put($ac1, $r1,
-        array:put($ar1, $c2,
-          array:put($ac2, $r2, 
-            _:remove-from-possible($ar2, $val)))))
+    if($ar2?p = $val) then
+      array:put($board, $c1,
+        array:put($ac1, $r1,
+          array:put($ar1, $c2,
+            array:put($ac2, $r2, 
+              _:remove-from-possible($ar2, $val)))))
+    else
+      $board
 };
 
 declare function _:set-value($map, $val){
