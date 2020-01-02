@@ -14,15 +14,17 @@ declare variable $_:SIMP_FUNS := (
 declare variable $_:LOOP_FUNS := (
   ['sole',             1, _:solve-sole-candidate#1    ],
   ['unique',           1, _:solve-unique-candidate#1  ],
+  ['block',            1, _:solve-block-column#1      ],
+  ['block',            1, _:solve-block-row#1         ],
   ['naked_2',         10, _:solve-naked-subsets(?, 2) ],
   ['naked_3',         10, _:solve-naked-subsets(?, 3) ],
-  ['block',           10, _:solve-block-column#1      ],
-  ['block',           10, _:solve-block-row#1         ],
   ['hidden_2',        10, _:solve-hidden-subsets(?, 2)],
-  ['xyz_wing',       100, _:solve-xyz-wing#1          ],
   ['x_wing',         100, _:solve-x-wing-row#1        ],
   ['x_wing',         100, _:solve-x-wing-column#1     ],
+  ['chain_1',        100, _:solve-singles-chain#1     ],
+  ['x_cycle',        100, _:solve-x-cycle#1           ],
   ['xy_wing',        100, _:solve-xy-wing#1           ],
+  ['xyz_wing',       100, _:solve-xyz-wing#1          ],
   ['hidden_3',       100, _:solve-hidden-subsets(?, 3)],
   ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
   ['hidden_4',       100, _:solve-hidden-subsets(?, 4)],
@@ -90,7 +92,7 @@ declare %private function _:solved($board) as xs:boolean
   _:get-unsolved($board) => empty()
 };
 
-declare %private function _:get-unsolved($board){
+declare function _:get-unsolved($board){
   let $ns := 1 to 3
   for $r1 in $ns, $r2 in $ns, $c1 in $ns, $c2 in $ns
   let $c := $board($c1)($r1)($c2)($r2)
@@ -130,13 +132,321 @@ declare %private function _:subtract($a, $b)
     $x
 };
 
-declare %private function _:deep-intersection($a, $b)
+declare %private function _:deep-subtract($as, $bs)
 {
-  for $a in $a
+  for $a in $as
   where
-    some $b in $b satisfies deep-equal($a, $b)
+    not( some $b in ($bs) satisfies deep-equal($b, $a) )
+  return 
+    $a
+};
+
+declare %private function _:deep-intersection($as, $bs)
+{
+  for $a in $as
+  where
+    some $b in $bs satisfies deep-equal($a, $b)
   return
     $a
+};
+
+declare %private function _:deep-distinct($as)
+{
+  _:deep-distinct(tail($as), head($as))
+};
+
+declare %private function _:deep-distinct($as, $acc)
+{
+  if (empty($as)) then $acc
+  else if ( some $a in $acc satisfies deep-equal(head($as), $a)) then
+    _:deep-distinct(tail($as), $acc)
+  else
+    _:deep-distinct(tail($as), (head($as), $acc) )
+};
+
+declare function _:get-strong-links($un)
+{
+  let $links := function($cells){
+    for $c in $cells, $p in $c?p
+    group by $p
+    where count($c) eq 2
+    return
+    [$p, ([$c[1], $c[2]], [$c[2], $c[1]])]
+  }
+  let $rowlinks := 
+    for $r1 in 1 to 3, $r2 in 1 to 3
+    return
+      $links($un[.?r1 eq $r1 and .?r2 eq $r2])
+  let $collinks := 
+    for $c1 in 1 to 3, $c2 in 1 to 3
+    return
+      $links($un[.?c1 eq $c1 and .?c2 eq $c2])
+  let $blklinks := 
+    for $c1 in 1 to 3, $r1 in 1 to 3
+    return
+      $links($un[.?c1 eq $c1 and .?r1 eq $r1])
+  let $grouped := 
+    for $l in ($rowlinks, $collinks, $blklinks)
+    let $p := $l?1
+    let $c := $l?2
+    group by $p
+    return
+    [$p, $c => _:deep-distinct()]
+  return
+    $grouped
+};
+
+declare function _:get-weak-links($un)
+{
+  let $links := function($cells){
+    for $c in $cells, $p in $c?p
+    group by $p
+    where count($c) > 2
+    return
+    [
+      $p,
+      for $x in $c, $y in $c
+      where not(deep-equal($x, $y))
+      return 
+      [$x, $y]
+    ]
+  }
+  let $rowlinks := 
+    for $r1 in 1 to 3, $r2 in 1 to 3
+    return
+      $links($un[.?r1 eq $r1 and .?r2 eq $r2])
+  let $collinks := 
+    for $c1 in 1 to 3, $c2 in 1 to 3
+    return
+      $links($un[.?c1 eq $c1 and .?c2 eq $c2])
+  let $blklinks := 
+    for $c1 in 1 to 3, $r1 in 1 to 3
+    return
+      $links($un[.?c1 eq $c1 and .?r1 eq $r1])
+  let $grouped := 
+    for $l in ($rowlinks, $collinks, $blklinks)
+    let $p := $l?1
+    let $c := $l?2
+    group by $p
+    return
+    [$p, $c => _:deep-distinct()]
+  return
+    $grouped
+};
+
+declare function _:alternating-cycle($strong, $weak)
+{
+  if (empty($strong)) then ()
+  else
+    let $h := head($strong), $t := tail($strong)
+    let $a := _:alternating-cycle-strong($h?2, $t, $weak, $h?1)
+    return
+      if(empty($a)) then
+        _:alternating-cycle($t, $weak)
+      else
+        $a[count(.?1) > 2 and (count(.?1) mod 2) eq 0]
+};
+
+declare function _:alternating-cycle-weak($cell, $strong, $weak, $acc)
+{
+  if(some $x in $acc satisfies deep-equal($x, $cell)) then [$acc] else
+  for $s in $strong[deep-equal(.?1, $cell)]
+  let $cell1 := $s?2
+  let $next := _:deep-subtract($strong, $s)
+  return
+    _:alternating-cycle-strong($cell1, $next, $weak, ($cell, $acc))
+};
+
+declare function _:alternating-cycle-strong($cell, $strong, $weak, $acc)
+{
+  if(some $x in $acc satisfies deep-equal($x, $cell)) then [$acc] else
+  for $s in $weak[deep-equal(.?1, $cell)]
+  let $cell1 := $s?2
+  let $next := _:deep-subtract($weak, $s)
+  return
+    _:alternating-cycle-weak($cell1, $strong, $next, ($cell, $acc))
+};
+
+(: X Cycle - https://www.sudokuwiki.org/X_Cycles :)
+declare function _:solve-x-cycle($board)
+{
+  let $un := _:get-unsolved($board)
+  let $strong := _:get-strong-links($un)
+  let $weak := _:get-weak-links($un)
+  let $rems := (
+    for $s in $strong
+    let $p := $s?1
+    let $l := $s?2
+    let $w := ($weak[.?1 eq $p])?2
+    for $cycle in _:alternating-cycle($l, $w)
+    let $cycle := $cycle?1
+    for $r in (_:deep-subtract($un, $cycle))[.?p = $p]
+    where
+      count(
+        for $c in $cycle 
+        where 
+          _:can-see-each-other-direct($c, $r) 
+        return 1
+      ) > 1
+    return
+      map:put($r, 'v', $p)
+  )
+  return
+    $rems
+    => fn:fold-left($board, function($acc, $i){
+      b:remove-from-possible($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
+    })
+};
+
+(: Singles Chain - https://www.sudokuwiki.org/Singles_Chains
+  Terminology:
+    Single - A link in a row/column/block between two cells that are the 
+      only 2 cells with a certain possible value.
+    Chain - A chain is a group of links that lead to each other.
+      Chains can be loops or not loops. They can also be nets and not 
+      a single chain.
+  Description:
+    Each cell in a link gets put in alternating buckets. Since the link chain
+    follows the only 2 possible answers for each cell for a certain number.
+    If following a chain leads to a certain bucket containing 2 cells in one
+    unit, that bucket is incorrect and all cells in the other bucket are correct.
+    The value can be set for each of those cells.
+    If the chain does not lead to any set values, each cell in both buckets 
+    in different units can be compared for the cells they both can see. These
+    cells cannot contain the value, and can have it removed.
+ :)
+declare function _:solve-singles-chain($board)
+{
+  let $un := _:get-unsolved($board)
+  let $grouped := _:get-strong-links($un)
+  let $chains := $grouped => _:single-chains()
+  let $sets :=
+    for $c in $chains
+    return
+      _:check-double-link-in-unit($c)
+  let $rems :=
+    for $c in $chains
+    return
+      _:check-opposite-double-links($c, $un)
+  return
+    if (empty($sets) and empty($rems)) then
+      $board
+    else if (empty($sets)) then
+      $rems
+      => fn:fold-left($board, function($acc, $i){
+        b:remove-from-possible($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
+      })
+    else
+      $sets
+      => fn:fold-left($board, function($acc, $i){
+        b:set($acc, $i?c1, $i?r1, $i?c2, $i?r2, $i?v)
+      })
+};
+
+(: given list of [poss, cells] return list of [poss, grp1, grp2]
+    there can be more than one chain per possible value. (not all linked)
+    chains will contain at least 3 values.
+ :)
+declare function _:single-chains($groups)
+{
+  for $g in $groups
+  let $p := $g?1
+  let $g2 := $g?2
+  let $ch := _:get-single-chains($g2)
+  return
+    [$p, $ch]
+};
+
+declare function _:get-single-chains($links)
+{
+  if (empty($links)) then ()
+  else
+    let $color := 0
+    let $h := head($links)
+    let $t := tail($links)
+    return
+      _:get-single-chains($h?2, $t, $h?1, (), $color)
+};
+
+declare function _:get-single-chains($current, $rest, $grp1, $grp2, $color)
+{
+  (: let $_ := trace(count($rest)) return :)
+  if ( empty($rest) ) then
+  (
+    [$grp1, $grp2]
+  )
+  else if (empty($current)) then
+  (
+    [$grp1, $grp2], _:get-single-chains($rest)
+  )
+  else
+  (
+    let $next := 
+      for $c in $current
+      let $next := $rest[deep-equal(.?1, $c)]
+      return
+        $next
+    let $rest := _:deep-subtract($rest, $next)
+    (: let $_ := trace(count($rest)) :)
+    (: let $_ := trace(($next)) :)
+    return
+      if (empty($next)) then
+        ( [$grp1, $grp2], _:get-single-chains($rest) )
+      else if ($color eq 1) then
+        _:get-single-chains(
+          $next?2, 
+          $rest, 
+          ($grp1, $current) => _:deep-distinct(), 
+          $grp2, 
+          0)
+      else
+        _:get-single-chains(
+          $next?2, 
+          $rest, 
+          $grp1, 
+          ($grp2, $current) => _:deep-distinct(), 
+          1)
+  )
+};
+
+(: Return (possibly empty) list of values to set :)
+declare function _:check-double-link-in-unit($chains)
+{
+  let $f := function($l){
+    some $x in $l, $y in $l 
+    satisfies _:can-see-each-other($x, $y)
+  }
+  let $p := $chains?1
+  for $c in $chains?2
+  let $g1 := $c?1 (: => trace('g1 ') :)
+  let $g2 := $c?2 (: => trace('g2 ') :)
+  let $f1 := $f($g1)
+  let $f2 := $f($g2)
+  return
+    if($f1 and $f2) then
+      ()
+    else if($f1) then
+      $g2 ! map:put(., 'v', $p)
+    else if ($f2) then
+      $g1 ! map:put(., 'v', $p)
+    else
+      ()
+};
+
+declare function _:check-opposite-double-links($chains, $un)
+{
+  let $p := $chains?1
+  for $c in $chains?2
+  let $g1 := $c?1
+  let $g2 := $c?2
+  for $ca in _:deep-subtract($un, ($g1, $g2))[.?p = $p]
+  where
+    some $x in $g1, $y in $g2 
+    satisfies 
+      _:can-see-each-other($ca, $x) and
+      _:can-see-each-other($ca, $y)
+  return
+    map{'c1' : $ca?c1, 'c2' : $ca?c2, 'r1' : $ca?r1, 'r2' : $ca?r2, 'v' : $p}
 };
 
 (: https://sudoku9x9.com/sudoku_solving_techniques_9x9.html :)
@@ -383,11 +693,24 @@ declare %private function _:solve-xy-wing($board)
 
 declare %private function _:can-see-each-other($cell1, $cell2)
 {
-  ($cell1?c1 eq $cell2?c1 and $cell1?c2 eq $cell2?c2)
-  or
-  ($cell1?r1 eq $cell2?r1 and $cell1?r2 eq $cell2?r2)
-  or
-  ($cell1?c1 eq $cell2?c1 and $cell1?r1 eq $cell2?r1)
+  if (deep-equal($cell1, $cell2)) then 
+    false()
+  else
+    ($cell1?c1 eq $cell2?c1 and $cell1?c2 eq $cell2?c2)
+    or
+    ($cell1?r1 eq $cell2?r1 and $cell1?r2 eq $cell2?r2)
+    or
+    ($cell1?c1 eq $cell2?c1 and $cell1?r1 eq $cell2?r1)
+};
+
+declare %private function _:can-see-each-other-direct($cell1, $cell2)
+{
+  if (deep-equal($cell1, $cell2)) then 
+    false()
+  else
+    ($cell1?c1 eq $cell2?c1 and $cell1?c2 eq $cell2?c2)
+    or
+    ($cell1?r1 eq $cell2?r1 and $cell1?r2 eq $cell2?r2)
 };
 
 (: WXYZ-Wing - https://www.sudokuwiki.org/WXYZ_Wing

@@ -336,7 +336,7 @@ declare %public function _:board-from-string($string){
 (:~ 
   Returns a new empty board with no hints set.
  :)
-declare %private function _:new()
+declare (: %private :) function _:new()
 {
   let $empty := map{'p' : 1 to 9, 'v' : 0}
     , $i1 := array{for $a in 1 to 3 return $empty}

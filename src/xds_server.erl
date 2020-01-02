@@ -18,6 +18,12 @@ init([]) ->
     State = load_code(),
     {ok, State}.
 
+handle_call(test, _From, #{test := Test} = State) ->
+    Reply = xqerl:run(Test),
+    {reply, Reply, State};
+handle_call(run, _From, #{run := Run} = State) ->
+    Reply = xqerl:run(Run),
+    {reply, Reply, State};
 handle_call(counts, _From, #{counts := Counts} = State) ->
     Reply = xqerl:run(Counts),
     {reply, Reply, State};
@@ -48,13 +54,17 @@ load_code() ->
     XqDir = code:priv_dir(xqerl_demo_sudoku),
     B = filename:join(XqDir, "sudoku-boards.xqm"),
     S = filename:join(XqDir, "sudoku-solve.xqm"),
+    C = filename:join(XqDir, "sudoku-create.xqm"),
     %io:format("B: ~p~n", [B]),
     %io:format("S: ~p~n", [S]),
     _ = xqerl:compile(B),
     _ = xqerl:compile(S),
+    _ = xqerl:compile(C),
     Run = xqerl:compile(filename:join(XqDir, "sudoku-run.xq")),
     Counts = xqerl:compile(filename:join(XqDir, "logic-counts.xq")),
     Puzzles = xqerl:compile(filename:join(XqDir, "get-puzzles.xq")),
-    #{run => Run,
+    Test = xqerl:compile(filename:join(XqDir, "test.xq")),
+    #{test => Test,
+      run => Run,
       counts => Counts,
       puzzles => Puzzles}.
