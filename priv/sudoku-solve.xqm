@@ -25,6 +25,8 @@ declare variable $_:LOOP_FUNS := (
   ['hidden_2',        10, _:solve-hidden-subsets(?, 2)],
   ['xyz_wing',       100, _:solve-xyz-wing#1          ],
   ['x_cycle',        100, _:solve-x-cycle#1           ],
+  ['x_cycle',        100, _:solve-x-cycle-dbl-weak#1  ],
+  ['x_cycle',        100, _:solve-x-cycle-dbl-strong#1],
   ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
     (: ['hidden_3',       100, _:solve-hidden-subsets(?, 3)], :)
     (: ['hidden_4',       100, _:solve-hidden-subsets(?, 4)] :)
@@ -36,8 +38,8 @@ declare variable $_:LOOP_FUNS := (
 );
 
 (: debug function to dump each step :)
-declare function _:dump-diff($original, $new, $key){$new};
-declare function _:dump-diff_($original, $new, $key)
+declare function _:dump-diff_($original, $new, $key){$new};
+declare function _:dump-diff($original, $new, $key)
 {
   let $ms := _:board-diff($original, $new)
   let $f := file:append-text-lines(file:base-dir() || 'dump_do.log', ?)
@@ -258,6 +260,22 @@ declare function _:alternating-cycle($strong, $weak)
         $a[count(.?1) > 2 and (count(.?1) mod 2) eq 0]
 };
 
+declare function _:alternating-odd-cycle-strong($strong, $weak)
+{
+  for $h in $strong
+  let $a := _:alternating-cycle-strong($h?2, $strong, $weak, $h?1)
+  return
+    $a[count(.?1) > 2 and (count(.?1) mod 2) eq 1]
+};
+
+declare function _:alternating-odd-cycle-weak($strong, $weak)
+{
+  for $h in $weak
+  let $a := _:alternating-cycle-weak($h?2, $strong, $weak, $h?1)
+  return
+    $a[count(.?1) > 2 and (count(.?1) mod 2) eq 1]
+};
+
 declare function _:alternating-cycle-weak($cell, $strong, $weak, $acc)
 {
   if(some $x in $acc satisfies deep-equal($x, $cell)) then [$acc] else
@@ -306,6 +324,52 @@ declare function _:solve-x-cycle($board)
     [
       count($rems),
       fn:fold-left($rems, $board, _:remove#2)
+    ]
+};
+
+declare function _:solve-x-cycle-dbl-weak($board)
+{
+  let $un := _:get-unsolved($board)
+  let $strong := _:get-strong-links($un)
+  let $weak := _:get-weak-links($un)
+  let $rems := (
+    for $s in $weak
+    let $p := $s?1
+    let $w := $s?2
+    let $l := ($strong[.?1 eq $p])?2
+    for $cycle in _:alternating-odd-cycle-weak($l, $w)
+    let $cycle := $cycle?1
+    let $cell := $cycle[last()]
+    return
+      map:put($cell, 'v', $p)
+  )
+  return
+    [
+      count($rems),
+      fn:fold-left($rems, $board, _:remove#2)
+    ]
+};
+
+declare function _:solve-x-cycle-dbl-strong($board)
+{
+  let $un := _:get-unsolved($board)
+  let $strong := _:get-strong-links($un)
+  let $weak := _:get-weak-links($un)
+  let $rems := (
+    for $s in $strong
+    let $p := $s?1
+    let $s := $s?2
+    let $l := ($weak[.?1 eq $p])?2
+    for $cycle in _:alternating-odd-cycle-strong($s, $l)
+    let $cycle := $cycle?1
+    let $cell := $cycle[last()]
+    return
+      map:put($cell, 'v', $p)
+  )
+  return
+    [
+      count($rems),
+      fn:fold-left($rems, $board, _:set#2)
     ]
 };
 
@@ -1492,7 +1556,7 @@ declare %private function _:do-loop($board, $cnts, $funs, $allFuns)
       else
         _:do-loop(
           _:dump-diff($board, $board1?2, $key), 
-          _:incr_cnt($cnts, $key (: => trace('did ') :), $weight * $board1?1),
+          _:incr_cnt($cnts, $key => trace('did '), $weight * $board1?1),
           $allFuns,
           $allFuns)
 };
