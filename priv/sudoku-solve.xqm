@@ -39,8 +39,8 @@ declare variable $_:ALL_FUNS := (
   ['x_cycle',       1000, _:solve-x-cycle#1           ],
   ['x_cycle',       1000, _:solve-x-cycle-dbl-weak#1  ],
   ['x_cycle',       1000, _:solve-x-cycle-dbl-strong#1],
-  ['xy_chain' ,     1000, _:solve-xy-chain#1          ],
-  ['wxyz_wing',     1000, _:solve-wxyz-wing#1         ]
+  ['wxyz_wing',     1000, _:solve-wxyz-wing#1         ],
+  ['xy_chain' ,     1000, _:solve-xy-chain#1          ]
   (: ,
   ['coloring',      1000, _:solve-coloring#1          ],
   ['forcing_chain', 1000, _:solve-forcing-chain#1     ] :)
@@ -887,7 +887,8 @@ declare %private function _:solve-wxyz-wing($board)
   (
     for $hinge in $un
     let $vis := b:visible-cells($hinge, $un)
-    for $quad in _:naked-quad(($hinge, $vis))
+    for $quad in _:naked-quad($hinge, $vis)
+    return
     let $ps := $quad?*?p => distinct-values()
     let $cand := 
       for $p in $ps
@@ -897,28 +898,29 @@ declare %private function _:solve-wxyz-wing($board)
       group by
         $p
       where
-        (every $q0 in $q, $q1 in $q satisfies _:can-see-each-other($q0, $q1)) => not()
+        (every $q0 in $q, $q1 in $q[not(deep-equal(., $q0))] satisfies 
+         _:can-see-each-other($q0, $q1)) => not()
       return
         [$p, $q]
+    where
+      count($cand) eq 1
     return
-    if (count($cand) eq 1 ) then
       let $v := $cand?1
-      let $head := head($cand?2) => b:visible-cells($un)
-      for $inter in fold-left(tail($cand?2), $head, function($acc, $i){
-        b:visible-cells($i, $un) => _:deep-intersection($acc)
-      })
+      let $cs := $cand?2
+      for $u in _:deep-subtract($un, $cs)
       where
-        (some $w in $cand?2 satisfies deep-equal($w, $inter)) => not()
+        every $x in $cs satisfies _:can-see-each-other($x, $u)
       where
-        b:is-possible($board, $inter?c1, $inter?r1, $inter?c2, $inter?r2, $v)
+        $u?p = $v
       return 
         map{
         'v' : $v,
-        'r1' : $inter?r1, 'r2' : $inter?r2,
-        'c1' : $inter?c1, 'c2' : $inter?c2
+        'r1' : $u?r1, 'r2' : $u?r2,
+        'c1' : $u?c1, 'c2' : $u?c2
       }
-    else ()
   )
+  => _:deep-distinct()
+  
   return
     [
       count($rems),
@@ -1266,17 +1268,21 @@ declare %private function _:solve-naked-row-subsets($board, $n)
     ]
 };
 
-declare %private function _:naked-quad($cells)
+declare %private function _:naked-quad($root, $ocells)
 {
-  if (count($cells) le 4)  then ()
+  if (count($ocells) le 3)  then ()
   else
-    for $a in _:permutations($cells, 4)
-    let $ms := $a?*
-    let $ps := $ms?p => distinct-values()
-    where 
-      count($ps) eq 4
+    for $a in _:permutations(($root, $ocells), 4)
+    let $cells := $a?*
+    where
+      some $c in $cells satisfies deep-equal($c, $root)
+    let $dps := $cells?p => distinct-values()
+    where
+      count($dps) eq 4
+    where
+      every $p in $dps satisfies count($cells?p[. eq $p]) gt 1
     return
-      array{$ms}
+      array{$cells}
 };
 
 declare %private function _:paired-possibles($cells, $n)
