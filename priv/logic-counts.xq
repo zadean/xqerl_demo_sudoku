@@ -4,5 +4,7 @@ let $v := $a
 let $n := $a/name() => string()
 group by
   $n
+order by
+  count($v) descending
 return
   $n || ' ' || sum($v)

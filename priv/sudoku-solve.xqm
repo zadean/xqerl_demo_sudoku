@@ -4,14 +4,25 @@ import module namespace b = 'http://xqerl.org/sudoku/board' at 'sudoku-boards.xq
 
 (: Simple solving logic functions :)
 declare variable $_:SIMP_FUNS := (
-  ['sole', 0, _:solve-sole-candidate#1],
-  ['unique', 1, _:solve-unique-candidate#1],
-  ['block', 5, _:solve-block-column#1],
-  ['block', 5, _:solve-block-row#1]
+  ['sole',             1, _:solve-sole-candidate#1    ],
+  ['unique',           1, _:solve-unique-candidate#1  ],
+  ['block',            1, _:solve-block-column#1      ],
+  ['block',            1, _:solve-block-row#1         ]
+);
+
+(: Medium solving logic functions :)
+declare variable $_:MED_FUNS := (
+  ['sole',             1, _:solve-sole-candidate#1    ],
+  ['unique',           1, _:solve-unique-candidate#1  ],
+  ['block',            1, _:solve-block-column#1      ],
+  ['block',            1, _:solve-block-row#1         ],
+  ['naked_2',         10, _:solve-naked-subsets(?, 2) ],
+  ['naked_3',         10, _:solve-naked-subsets(?, 3) ],
+  ['hidden_2',        10, _:solve-hidden-subsets(?, 2)]
 );
 
 (: All solving logic functions :)
-declare variable $_:LOOP_FUNS := (
+declare variable $_:ALL_FUNS := (
   ['sole',             1, _:solve-sole-candidate#1    ],
   ['unique',           1, _:solve-unique-candidate#1  ],
   ['block',            1, _:solve-block-column#1      ],
@@ -24,12 +35,11 @@ declare variable $_:LOOP_FUNS := (
   ['chain_1',        100, _:solve-singles-chain#1     ],
   ['hidden_2',        10, _:solve-hidden-subsets(?, 2)],
   ['xyz_wing',       100, _:solve-xyz-wing#1          ],
-  ['x_cycle',        100, _:solve-x-cycle#1           ],
-  ['x_cycle',        100, _:solve-x-cycle-dbl-weak#1  ],
-  ['x_cycle',        100, _:solve-x-cycle-dbl-strong#1],
   ['naked_4',        100, _:solve-naked-subsets(?, 4) ],
-    (: ['hidden_3',       100, _:solve-hidden-subsets(?, 3)], :)
-    (: ['hidden_4',       100, _:solve-hidden-subsets(?, 4)] :)
+  ['x_cycle',       1000, _:solve-x-cycle#1           ],
+  ['x_cycle',       1000, _:solve-x-cycle-dbl-weak#1  ],
+  ['x_cycle',       1000, _:solve-x-cycle-dbl-strong#1],
+  ['xy_chain' ,     1000, _:solve-xy-chain#1          ],
   ['wxyz_wing',     1000, _:solve-wxyz-wing#1         ]
   (: ,
   ['coloring',      1000, _:solve-coloring#1          ],
@@ -371,6 +381,61 @@ declare function _:solve-x-cycle-dbl-strong($board)
       count($rems),
       fn:fold-left($rems, $board, _:set#2)
     ]
+};
+
+declare function _:solve-xy-chain($board)
+{
+  let $un := _:get-unsolved($board)
+  let $dbl := $un[count(.?p) eq 2]
+  let $not := $un[count(.?p) gt 2]
+  let $poss := 
+    for $x at $c in $dbl
+    for $y in $un[position() > $c]
+    for $i in _:intersection($x?p, $y?p)
+    where
+      some $n in $not[.?p = $i] satisfies 
+        _:can-see-each-other($x, $n) 
+        and _:can-see-each-other($y, $n)
+    return
+      [$i, $x]
+  let $rems := (
+    for $p in $poss
+    let $g := $p?1
+    let $c := $p?2
+    let $chain := _:alternating-chain(
+                    $g,
+                    _:subtract($c?p, $g),
+                    $c, 
+                    _:deep-subtract($dbl, $c), 
+                    $c)
+    where
+      exists($chain)
+    for $r in $not[.?p = $g]
+    where 
+      _:can-see-each-other($chain[1], $r)
+    where 
+      _:can-see-each-other($c, $r)
+    return
+      map:put($r, 'v', $g)
+  )
+  => _:deep-distinct()
+  return
+    [
+      count($rems),
+      fn:fold-left($rems, $board, _:remove#2)
+    ]
+};
+
+declare function _:alternating-chain($p, $c, $cell, $dbls, $acc)
+{
+  if ($p eq $c and (count($acc) mod 2) eq 0) then $acc else
+  for $d in $dbls[.?p = $c]
+  where
+    _:can-see-each-other($cell, $d)
+  let $c := $d?p => _:subtract($c)
+  let $dbls := _:deep-subtract($dbls, $d)
+  return
+    _:alternating-chain($p, $c, $d, $dbls, ($d, $acc))
 };
 
 (: Singles Chain - https://www.sudokuwiki.org/Singles_Chains
@@ -1556,7 +1621,7 @@ declare %private function _:do-loop($board, $cnts, $funs, $allFuns)
       else
         _:do-loop(
           _:dump-diff($board, $board1?2, $key), 
-          _:incr_cnt($cnts, $key => trace('did '), $weight * $board1?1),
+          _:incr_cnt($cnts, $key (: => trace('did ') :), $weight * $board1?1),
           $allFuns,
           $allFuns)
 };
@@ -1576,7 +1641,7 @@ declare function _:solve($board)
 
 declare %private function _:loop($board, $cnts)
 {
-  let $new := _:do-loop($board, $cnts, $_:LOOP_FUNS, $_:LOOP_FUNS)
+  let $new := _:do-loop($board, $cnts, $_:ALL_FUNS, $_:ALL_FUNS)
     , $board1 := $new(1)
     , $cnts1  := $new(2)
   return
@@ -1612,5 +1677,28 @@ declare %private function _:simp-loop($board, $cnts)
       [$cnts, 'unsolved', $board]
     else 
       _:simp-loop($board1, $cnts1)
+};
+
+declare function _:solve-medium($board)
+{
+  try {
+    _:medi-loop($board, map{'score' : 0})
+  } catch * {
+     [map{}, 'incorrect', $board] 
+  }
+};
+
+declare %private function _:medi-loop($board, $cnts)
+{
+  let $new := _:do-loop($board, $cnts, $_:MED_FUNS, $_:MED_FUNS)
+    , $board1 := $new(1)
+    , $cnts1  := $new(2)
+  return
+    if(_:solved($board1)) then 
+      [$cnts1, 'solved', $board1]
+    else if (deep-equal($board1, $board)) then 
+      [$cnts, 'unsolved', $board]
+    else 
+      _:medi-loop($board1, $cnts1)
 };
 

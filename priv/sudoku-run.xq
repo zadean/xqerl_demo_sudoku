@@ -29,3 +29,4 @@ let $string := b:new-random()
   , $score  := $solved?1
 return
   _:upsert-solved-puzzle($string, $solut, $score)
+  (: $string :)

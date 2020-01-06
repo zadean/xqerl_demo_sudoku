@@ -108,7 +108,7 @@ declare function _:backtrack-4($string)
 {
   let $first := $string?1
                 => _:sub-boards(4) 
-                => _:first-solvable(0)
+                => _:first-solvable-simple()
   return
   if (empty($first)) then
     $string 
@@ -121,7 +121,7 @@ declare function _:backtrack-2($string)
 {
   let $first := $string?1
                 => _:sub-boards(2) 
-                => _:first-solvable(0)
+                => _:first-solvable-medium()
   return
   if (empty($first)) then
     $string 
@@ -155,6 +155,36 @@ declare function _:first-solvable($strings, $score)
         [$h, $s?1?score]
       else
         _:first-solvable($t, $score)
+};
+
+declare function _:first-solvable-simple($strings)
+{
+  if (empty($strings)) then 
+    ()
+  else
+    let $h := head($strings)
+      , $t := tail($strings)
+      , $s := $h => b:board-from-string() => s:solve-simple()
+    return
+      if($s?2 eq 'solved') then
+        [$h, $s?1?score]
+      else
+        _:first-solvable-simple($t)
+};
+
+declare function _:first-solvable-medium($strings)
+{
+  if (empty($strings)) then 
+    ()
+  else
+    let $h := head($strings)
+      , $t := tail($strings)
+      , $s := $h => b:board-from-string() => s:solve-medium()
+    return
+      if($s?2 eq 'solved') then
+        [$h, $s?1?score]
+      else
+        _:first-solvable-medium($t)
 };
 
 declare 
