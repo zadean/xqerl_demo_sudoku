@@ -37,4 +37,4 @@ declare function local:puzzle-map($puzz)
   return
     local:puzzle-map($puzz)
 ) 
-=> erlang:item-to-term()
+(: => erlang:item-to-term() :)

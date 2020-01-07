@@ -888,7 +888,6 @@ declare %private function _:solve-wxyz-wing($board)
     for $hinge in $un
     let $vis := b:visible-cells($hinge, $un)
     for $quad in _:naked-quad($hinge, $vis)
-    return
     let $ps := $quad?*?p => distinct-values()
     let $cand := 
       for $p in $ps
@@ -920,7 +919,6 @@ declare %private function _:solve-wxyz-wing($board)
       }
   )
   => _:deep-distinct()
-  
   return
     [
       count($rems),
@@ -1276,11 +1274,12 @@ declare %private function _:naked-quad($root, $ocells)
     let $cells := $a?*
     where
       some $c in $cells satisfies deep-equal($c, $root)
-    let $dps := $cells?p => distinct-values()
+    let $ps := $cells?p
+    let $dps := $ps => distinct-values()
     where
       count($dps) eq 4
     where
-      every $p in $dps satisfies count($cells?p[. eq $p]) gt 1
+      every $p in $dps satisfies count( $ps[. eq $p] ) gt 1
     return
       array{$cells}
 };
