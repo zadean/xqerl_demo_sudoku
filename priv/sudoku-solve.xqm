@@ -48,8 +48,8 @@ declare variable $_:ALL_FUNS := (
 );
 
 (: debug function to dump each step :)
-declare function _:dump-diff_($original, $new, $key){$new};
-declare function _:dump-diff($original, $new, $key)
+declare function _:dump-diff($original, $new, $key){$new};
+declare function _:dump-diff_($original, $new, $key)
 {
   let $ms := _:board-diff($original, $new)
   let $f := file:append-text-lines(file:base-dir() || 'dump_do.log', ?)
