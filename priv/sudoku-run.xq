@@ -28,5 +28,5 @@ let $string := b:new-random()
   , $solut  := $solved?3 => b:board-string()
   , $score  := $solved?1
 return
-  _:upsert-solved-puzzle($string, $solut, $score)
+  _:upsert-solved-puzzle($string?1, $solut, $score)
   (: $string :)
