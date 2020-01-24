@@ -19,14 +19,12 @@ declare %updating function _:upsert-solved-puzzle($hints, $sol, $score)
       fn:put(document {element s {attribute solution {$sol}, $rec}},$docname)
 };
 
-let $string := b:new-random() 
-               => b:board-string() 
-               => b:translate()
+let $min_id := b:new-seeded-random()
+let $string := $min_id?1
                => c:backtrack()
   , $board  := $string?1 => b:board-from-string()
   , $solved := $board => s:solve()
-  , $solut  := $solved?3 => b:board-string()
   , $score  := $solved?1
 return
-  _:upsert-solved-puzzle($string?1, $solut, $score)
-  (: $string :)
+  _:upsert-solved-puzzle($string?1, $min_id?2 => trace('id '), $score)
+  (: $solved => array:get(3) => b:board-string() :)

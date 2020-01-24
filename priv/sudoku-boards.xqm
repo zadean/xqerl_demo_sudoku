@@ -1,14 +1,8 @@
 module namespace _ = 'http://xqerl.org/sudoku/board';
 
-declare namespace x = "http://xqerl.org/xquery";
+import module namespace p = 'http://xqerl.org/sudoku/board/permute' at 'sudoku-board-permute.xqm';
 
-(: Reorder the board digits to have 1..9 as the top row. :)
-declare function _:translate($str as xs:string) as xs:string
-{
-  let $sub := fn:substring($str, 1, 9)
-  return
-    fn:translate($str, $sub, '123456789')
-};
+declare namespace x = "http://xqerl.org/xquery";
 
 declare function _:visible-cells($cell, $all)
 {
@@ -264,15 +258,29 @@ declare function _:positions(){
   [$c1, $r1, $c2, $r2]
 };
 
+(: declare function _:seeded-positions(){
+  let $ns := 1 to 3
+  for $r1 in $ns, $r2 in $ns, $c1 in $ns, $c2 in $ns
+  where
+    not($r1 eq 1 and $r2 eq 1)
+  where
+    not($c1 eq $r2 and $r1 eq $c2)  
+  return
+  [$c1, $r1, $c2, $r2]
+}; :)
+
 declare function _:runx($board, $positions){
   if ($positions => empty()) then
     $board
   else
     let $h := fn:head($positions)
-    let $ps := $board($h(1))($h(2))($h(3))($h(4))('p')
-               => _:random-order()
+    let $c := $board($h(1))($h(2))($h(3))($h(4))
+    let $ps := $c?p
     return
-    _:runx($board, $ps, $positions)
+      if($ps => empty() and ($c?v eq 0) => not() ) then
+        _:runx($board, $positions => tail())
+      else
+        _:runx($board, $ps => _:random-order(), $positions)
 };
 
 declare function _:runx($board, $possibles, $positions){
@@ -307,12 +315,42 @@ declare function _:random-hinted($board, $nr, $type)
   })
 };
 
+
+declare function _:get-min-and-id($string)
+{
+  let $min := p:minimum-board-string($string)
+  return
+  [
+    $min,
+    $min => p:to-id()
+  ]
+};
+
 (:~ 
-  Returns a random solved board.
+  Returns a random, solved, minimized board string and its unique 32 byte ID.
  :)
 declare %public function _:new-random()
 {
   _:runx(_:new(), _:positions())
+  => _:board-string()
+  => _:get-min-and-id()
+};
+
+declare %public function _:new-seeded-random()
+{
+  '123456789000100000000000100010000000000010000000000010001000000000001000000000001'
+  => _:new-seeded-random()
+};
+
+declare %public function _:new-seeded-random($string)
+{
+  let $new := $string
+              => _:board-from-string()
+  return
+  _:runx($new, _:positions())
+  (: _:runx($new, _:seeded-positions()) :)
+  => _:board-string()
+  => _:get-min-and-id()
 };
 
 (:~ 

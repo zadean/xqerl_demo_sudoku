@@ -173,7 +173,7 @@ declare %private function _:deep-intersection($as, $bs)
     $a
 };
 
-declare %private function _:deep-distinct($as)
+declare function _:deep-distinct($as)
 {
   _:deep-distinct(tail($as), head($as))
 };
@@ -695,43 +695,41 @@ declare %private function _:solve-x-wing-row($board)
     order by 
       $p
     return
-      [$p, $c, $r, $u])
+      [$p, $c => sort(), $r, $u])
   let $four :=
-    for $x in $two, $y in $two
+    for $x at $xp in $two, $y in $two[position() > $xp]
     let $p1 := $x(1), $p2 := $y(1)
     let $c1 := $x(2), $c2 := $y(2)
     let $r1 := $x(3), $r2 := $y(3)
-    let $u1 := $x(4)
+    let $us := ($x(4), $y(4))
     where
       $p1 eq $p2 and
       deep-equal($c1, $c2) and
       $r1 ne $r2
-    group by $p1
-    where
-      count($u1) eq 4
     return 
-      [$p1, $u1]
+      [$p1, $us]
   let $rem := 
   (
     for $x in $four
-    return
     let $p := $x(1)
-    for $u in $x(2)
-    let $c1 := $u?c1
-    let $c2 := $u?c2
-    let $r := [$u?r1, $u?r2]
-    group by
-      $p, $c1, $c2
-    return
-    for $r1 in 1 to 3, $r2 in 1 to 3
+    let $us := $x(2)
+    let $cols := (
+      for $u in $us
+      let $c1 := $u?c1
+      let $c2 := $u?c2
+      group by 
+        $c1, $c2
+      return
+        [$c1, $c2]
+    )
+    let $maybe := _:deep-subtract($un, $us)
+    for $m in $maybe
     where
-      (for $r in $r where deep-equal($r, [$r1, $r2]) return $r) => empty()
-    where 
-      b:is-possible($board, $c1, $r1, $c2, $r2, $p)
+      ($m?c1 eq $cols[1]?1 and $m?c2 eq $cols[1]?2 and $m?p = $p)
+      or
+      ($m?c1 eq $cols[2]?1 and $m?c2 eq $cols[2]?2 and $m?p = $p)
     return
-    map{
-      'v' : $p, 'c1': $c1, 'c2': $c2, 'r1' : $r1, 'r2' : $r2
-    }
+      map:put($m, 'v', $p)
   )
   return
     [
@@ -755,49 +753,47 @@ declare %private function _:solve-x-wing-column($board)
     order by 
       $p
     return
-      [$p, $c, $r, $u])
+      [$p, $c, $r => sort(), $u])
   let $four :=
-    for $x in $two, $y in $two
+    for $x at $xp in $two, $y in $two[position() > $xp]
     let $p1 := $x(1), $p2 := $y(1)
     let $c1 := $x(2), $c2 := $y(2)
     let $r1 := $x(3), $r2 := $y(3)
-    let $u1 := $x(4)
+    let $us := ($x(4), $y(4))
     where
       $p1 eq $p2 and
       deep-equal($r1, $r2) and
       $c1 ne $c2
-    group by $p1
-    where
-      count($u1) eq 4
     return 
-      [$p1, $u1]
+      [$p1, $us]
   let $rem := 
   (
     for $x in $four
-    return
     let $p := $x(1)
-    for $u in $x(2)
-    let $r1 := $u?r1
-    let $r2 := $u?r2
-    let $c := [$u?c1, $u?c2]
-    group by
-      $p, $r1, $r2
-    return
-    for $c1 in 1 to 3, $c2 in 1 to 3
+    let $us := $x(2)
+    let $rows := (
+      for $u in $us
+      let $r1 := $u?r1
+      let $r2 := $u?r2
+      group by 
+        $r1, $r2
+      return
+        [$r1, $r2]
+    )
+    let $maybe := _:deep-subtract($un, $us)
+    for $m in $maybe
     where
-      (for $c in $c where deep-equal($c, [$c1, $c2]) return $c) => empty()
-    where 
-      b:is-possible($board, $c1, $r1, $c2, $r2, $p)
+      ($m?r1 eq $rows[1]?1 and $m?r2 eq $rows[1]?2 and $m?p = $p)
+      or
+      ($m?r1 eq $rows[2]?1 and $m?r2 eq $rows[2]?2 and $m?p = $p)
     return
-    map{
-      'v' : $p, 'c1': $c1, 'c2': $c2, 'r1' : $r1, 'r2' : $r2
-    }
+      map:put($m, 'v', $p)
   )
   return
-  [
-    count($rem),
-    fn:fold-left($rem, $board, _:remove#2)
-  ]
+    [
+      count($rem),
+      fn:fold-left($rem, $board, _:remove#2)
+    ]
 };
 
 (: XY-Wing -https://sudoku9x9.com/xy_wing.html
@@ -1612,7 +1608,7 @@ declare %private function _:do-loop($board, $cnts, $funs, $allFuns)
                     $board => $fn()
                   } catch * {
                     (: let $_ := trace($err:description, $key) return :)
-                    fn:error($err:value)
+                    fn:error($err:value, $err:description, $board)
                   } 
     return
       if ($board1?1 eq 0) then
@@ -1640,7 +1636,7 @@ declare function _:solve($board)
     _:loop($board, map{'score' : 0})
   } catch * {
     (: let $_ := trace($err:description) return :)
-     [map{}, 'incorrect', $board] 
+     [map{}, 'incorrect', $err:value] 
   }
 };
 

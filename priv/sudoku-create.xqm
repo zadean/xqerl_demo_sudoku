@@ -187,6 +187,9 @@ declare function _:first-solvable-medium($strings)
         _:first-solvable-medium($t)
 };
 
+(: If a "box" exists, at least one of the cells must be a hint. Otherwise the 
+   puzzle will have multiple solutions.
+ :)
 declare 
   %notes:note('unused') 
 function _:boxes($board)
